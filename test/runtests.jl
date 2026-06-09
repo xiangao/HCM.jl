@@ -5,6 +5,7 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_intervention.jl")
     include("test_estimand.jl")
     include("test_sim.jl")
+    include("test_sim_nested.jl")
     include("test_spec.jl")
     include("test_confounder.jl")
     include("test_methods.jl")
