@@ -1,3 +1,28 @@
+@model function nested_model(y, a, school, class_, n_school, n_class, abar_class_i, abar_school_i, family)
+    β0 ~ Normal(0,5); β1 ~ Normal(0,5); λclass ~ Normal(0,5); λschool ~ Normal(0,5)
+    σschool ~ truncated(Normal(0,2); lower=0); σclass ~ truncated(Normal(0,2); lower=0)
+    zs ~ filldist(Normal(0,1), n_school); zc ~ filldist(Normal(0,1), n_class)
+    πc ~ filldist(Normal(0,3), n_class)
+    b_school = σschool .* zs; b_class = σclass .* zc
+    N = length(y)
+    for i in 1:N
+        a[i] ~ Bernoulli(logistic(πc[class_[i]]))
+    end
+    if family === :gaussian
+        σy ~ truncated(Normal(0,2); lower=0)
+        for i in 1:N
+            η = β0 + β1*a[i] + λclass*abar_class_i[i] + λschool*abar_school_i[i] + b_school[school[i]] + b_class[class_[i]]
+            y[i] ~ Normal(η, σy)
+        end
+    else
+        for i in 1:N
+            η = β0 + β1*a[i] + λclass*abar_class_i[i] + λschool*abar_school_i[i] + b_school[school[i]] + b_class[class_[i]]
+            y[i] ~ BernoulliLogit(η)
+        end
+    end
+    return (; β0, β1, λclass, λschool, b_school, b_class, p_class = logistic.(πc))
+end
+
 @model function confounder_model(y, a, unit, n_units, family)
     μ  ~ MvNormal(zeros(2), 25.0 * I(2))
     τ  ~ filldist(truncated(Normal(0, 2); lower=0), 2)

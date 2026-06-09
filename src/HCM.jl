@@ -26,6 +26,18 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
              chains::Int=2, iter::Int=600, groups=nothing, kwargs...)
     spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family, groups=groups)
+    if motif === :nested_confounder
+        model = nested_model(spec.y, spec.a, spec.school_id, spec.class_id, spec.n_schools, spec.n_classes,
+                             spec.abar_class_i, spec.abar_school_i, family)
+        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        gq = vec(generated_quantities(model, chain))
+        draws = (β0=[q.β0 for q in gq], β1=[q.β1 for q in gq],
+                 λclass=[q.λclass for q in gq], λschool=[q.λschool for q in gq],
+                 b_school=reduce(vcat, [permutedims(q.b_school) for q in gq]),
+                 b_class=reduce(vcat, [permutedims(q.b_class) for q in gq]),
+                 p_class=reduce(vcat, [permutedims(q.p_class) for q in gq]))
+        return HCMFit(draws, spec, chain)
+    end
     model = confounder_model(spec.y, spec.a, spec.unit_id, spec.n_units, family)
     # Julia has 1 thread on this machine; use MCMCSerial for multi-chain
     chain = sample(model, NUTS(0.95), MCMCSerial(), iter, chains; progress=false, kwargs...)

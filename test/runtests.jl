@@ -12,4 +12,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_confounder.jl")
     include("test_methods.jl")
     include("test_compare_fe.jl")
+    include("test_nested.jl")
 end
