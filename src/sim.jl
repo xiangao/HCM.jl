@@ -1,7 +1,36 @@
 function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gaussian, seed=nothing)
     motif === :confounder || motif === :nested_confounder || motif === :confounder_interference ||
+        motif === :instrument ||
         error("A1 implements only :confounder")
     seed === nothing || Random.seed!(seed)
+    if motif === :instrument
+        p_ = merge((θ0=0.0, θa=0.5, θr0=0.0, θr1=0.0, ψ=1.0, sd_u=1.0,
+                    α0=0.0, ρ=1.0, sd_α=0.3, β0=1.0, sd_β=0.3, sd_y=0.3, sd_ω=1.0), params)
+        u = randn(n).*p_.sd_u
+        ω = logistic.(randn(n).*p_.sd_ω)
+        α = p_.α0 .+ p_.ρ.*u .+ randn(n).*p_.sd_α
+        β = p_.β0 .+ randn(n).*p_.sd_β
+        π0 = logistic.(α); π1 = logistic.(α .+ β)
+        unit = repeat(1:n, inner=m); subunit = repeat(1:m, outer=n)
+        z = Int.(rand(n*m) .< ω[unit])
+        a = Int.(rand(n*m) .< logistic.(α[unit] .+ β[unit].*z))
+        qa = ω.*π1 .+ (1 .- ω).*π0
+        ηy = p_.θ0 .+ p_.θa.*qa .+ p_.ψ.*u
+        y_unit = family === :gaussian ? ηy .+ randn(n).*p_.sd_y : Float64.(rand(n) .< logistic.(ηy))
+        data = DataFrame(unit=unit, subunit=subunit, z=z, a=a, y=y_unit[unit])
+        gi = x -> logistic(x)
+        if family === :gaussian
+            true_hard = p_.θa
+            true_soft = (a★, ε) -> p_.θa * ε * mean(a★ .- qa)
+        else
+            true_hard = mean(gi.(p_.θ0 .+ p_.θa .+ p_.ψ.*u) .- gi.(p_.θ0 .+ p_.ψ.*u))
+            true_soft = (a★, ε) -> begin
+                rate_new = (1-ε).*qa .+ ε.*a★
+                mean(gi.(p_.θ0 .+ p_.θa.*rate_new .+ p_.ψ.*u) .- gi.(p_.θ0 .+ p_.θa.*qa .+ p_.ψ.*u))
+            end
+        end
+        return (; data, true_hard, true_soft, u, ω, π0, π1, qa)
+    end
     if motif === :confounder_interference
         p_ = merge((μ0=0.0, μ1=0.3, δ0=0.2, δ1=0.6, γ0=0.0, γ1=-0.8, γ2=0.2,
                     σz=0.5, τ0=1.0, sd_y=0.3, sd_s=1.0, p_a=0.5), params)
