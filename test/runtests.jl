@@ -7,4 +7,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_sim.jl")
     include("test_spec.jl")
     include("test_confounder.jl")
+    include("test_methods.jl")
 end

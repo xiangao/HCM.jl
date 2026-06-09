@@ -17,7 +17,7 @@ export hcm_spec, HCMSpec
 include("models.jl")
 
 include("methods.jl")
-export hcm, HCMFit
+export hcm, HCMFit, summarize_ate
 
 function hcm(formula, data; unit::Symbol, subunit::Symbol,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
