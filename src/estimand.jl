@@ -60,6 +60,22 @@ function _eo_interf(draws, spec, intv; gh=gausshermite(24))
     out
 end
 
+function _ate(::Val{:instrument}, draws, spec, intv; baseline=default_baseline(intv))
+    _eo_instrument(draws, spec, intv) .- _eo_instrument(draws, spec, baseline)
+end
+
+function _eo_instrument(draws, spec, intv)
+    D = length(draws.θa); fam = spec.family; qaobs = spec.qa_obs
+    out = zeros(D)
+    for d in 1:D
+        B = draws.θ0[d] .+ draws.θr0[d].*draws.π0[d,:] .+ draws.θr1[d].*draws.π1[d,:]
+        rate = intv isa Hard ? fill(float(intv.a_star), length(B)) :
+                               (1-intv.ε).*qaobs .+ intv.ε.*intv.a_star
+        out[d] = mean(link_inv(B .+ draws.θa[d].*rate, fam))
+    end
+    out
+end
+
 function _eo_nested(draws, spec, intv)
     D = length(draws.β1); fam = spec.family
     ki = spec.school_id; ci = spec.class_id

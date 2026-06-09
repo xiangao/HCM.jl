@@ -20,4 +20,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels, Random
     include("test_spec_instrument.jl")
     include("test_interference_estimand.jl")
     include("test_interference.jl")
+    include("test_instrument_estimand.jl")
 end
