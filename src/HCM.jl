@@ -4,4 +4,7 @@ using Turing, MCMCChains, FixedEffectModels
 
 include("intervention.jl")
 export Hard, Soft
+
+include("estimand.jl")
+export ate, link_inv
 end # module
