@@ -20,7 +20,7 @@
             y[i] ~ BernoulliLogit(η)
         end
     end
-    return (; β0, β1, λclass, λschool, b_school, b_class, p_class = logistic.(πc))
+    return (; β0, β1, λclass, λschool, σschool, σclass, b_school, b_class, p_class = logistic.(πc))
 end
 
 @model function confounder_model(y, a, unit, n_units, family)

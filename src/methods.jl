@@ -12,6 +12,12 @@ function summarize_ate(draws::AbstractVector)
     (; mean = mean(draws), std = std(draws), q025 = q[1], q975 = q[2])
 end
 
+function nested_diagnostics(draws)
+    summ(v) = (; mean=mean(v), q025=quantile(v,0.025), q975=quantile(v,0.975))
+    (; λclass=summ(draws.λclass), λschool=summ(draws.λschool),
+       σschool=summ(draws.σschool), σclass=summ(draws.σclass))
+end
+
 function Base.show(io::IO, fit::HCMFit)
     s = summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))
     print(io, "HCMFit(motif=$(fit.spec.motif), units=$(fit.spec.n_units), ",

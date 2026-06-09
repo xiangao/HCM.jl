@@ -17,7 +17,7 @@ export hcm_spec, HCMSpec, NestedSpec
 include("models.jl")
 
 include("methods.jl")
-export hcm, HCMFit, summarize_ate
+export hcm, HCMFit, summarize_ate, nested_diagnostics
 
 include("compare_fe.jl")
 export compare_fe
@@ -33,6 +33,7 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
         gq = vec(generated_quantities(model, chain))
         draws = (β0=[q.β0 for q in gq], β1=[q.β1 for q in gq],
                  λclass=[q.λclass for q in gq], λschool=[q.λschool for q in gq],
+                 σschool=[q.σschool for q in gq], σclass=[q.σclass for q in gq],
                  b_school=reduce(vcat, [permutedims(q.b_school) for q in gq]),
                  b_class=reduce(vcat, [permutedims(q.b_class) for q in gq]),
                  p_class=reduce(vcat, [permutedims(q.p_class) for q in gq]))
