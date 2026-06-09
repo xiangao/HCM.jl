@@ -2,4 +2,5 @@ using HCM, Test
 
 @testset "HCM.jl" begin
     # test files are included as they are implemented
+    include("test_intervention.jl")
 end
