@@ -37,10 +37,11 @@ function _eo_interf(draws, spec, intv; gh=gausshermite(24))
     abar = spec.abar; s = spec.s; n = spec.n_units
     out = zeros(D)
     for d in 1:D
-        # Hard: hold abar at observed (only individual treatment varies).
-        # Soft: shift the population mix, so abar changes proportionally.
+        # Hard do(A=a★): set the whole unit to a★, so ā=a★ propagates through the
+        #   z-channel (the full interference effect — the motif's point over FE).
+        # Soft do(σ_{a★,ε}): dose ε at a★, shifting the unit share ā proportionally.
         abar_eff = intv isa Soft ? ((1-intv.ε).*abar .+ intv.ε.*intv.a_star) :
-                                   abar
+                                   fill(float(intv.a_star), n)
         acc_units = 0.0
         for i in 1:n
             zmean = draws.γ0[d] + draws.γ1[d]*abar_eff[i] + draws.γ2[d]*s[i]

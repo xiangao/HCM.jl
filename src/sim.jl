@@ -89,7 +89,7 @@ function _interf_true(p_, u, s, pri, abar, family, kind, a★, ε)
         tot/n
     end
     if kind === :hard
-        edo(1, 0, abar) - edo(0, 0, abar)
+        edo(1, 0, fill(1.0, n)) - edo(0, 0, fill(0.0, n))   # full do: ā=1 vs ā=0 through the channel
     else
         abar_new = (1-ε).*abar .+ ε.*a★
         edo(a★, ε, abar_new) - edo(a★, 0, abar)
