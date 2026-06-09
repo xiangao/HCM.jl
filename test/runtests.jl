@@ -6,4 +6,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_estimand.jl")
     include("test_sim.jl")
     include("test_spec.jl")
+    include("test_confounder.jl")
 end
