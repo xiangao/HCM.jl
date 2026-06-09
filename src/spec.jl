@@ -20,8 +20,19 @@ struct NestedSpec
     family::Symbol; motif::Symbol
 end
 
+struct InterferenceSpec
+    outcome::Symbol; treatment::Symbol
+    y::Vector{Float64}; a::Vector{Int}
+    unit_id::Vector{Int}; n_units::Int
+    abar::Vector{Float64}; abar_i::Vector{Float64}
+    s::Vector{Float64}; s_i::Vector{Float64}
+    z::Vector{Float64}
+    family::Symbol; motif::Symbol
+end
+
 function hcm_spec(formula::FormulaTerm, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
-                  motif::Symbol=:confounder, family::Symbol=:gaussian, groups=nothing)
+                  motif::Symbol=:confounder, family::Symbol=:gaussian, groups=nothing,
+                  interferer=nothing, unit_covar=nothing)
     if motif === :nested_confounder
         outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
         a = Int.(data[!, treatment]); all(x->x in (0,1), a) || error("treatment must be 0/1")
@@ -36,6 +47,28 @@ function hcm_spec(formula::FormulaTerm, data; unit::Symbol=:unit, subunit::Symbo
         return NestedSpec(outcome, treatment, y, a, school_id, class_id, K, C,
                           abar_class, abar_school, abar_class[class_id], abar_school[school_id],
                           class_id, family, motif)
+    end
+    if motif === :confounder_interference
+        outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
+        a = Int.(data[!, treatment]); all(x->x in (0,1), a) || error("treatment must be 0/1")
+        y = Float64.(data[!, outcome])
+        ucodes = sort(unique(data[!, unit])); unit_id = Int.(indexin(data[!, unit], ucodes))
+        nU = length(ucodes)
+        abar = [mean(a[unit_id .== i]) for i in 1:nU]
+        # interferer z and covariate s are unit-level: take first value per unit, validate constant
+        unitfirst(col) = [first(data[!, col][unit_id .== i]) for i in 1:nU]
+        isunitlevel(col) = all(i -> length(unique(data[!, col][unit_id .== i])) == 1, 1:nU)
+        interferer === nothing && error("motif :confounder_interference requires `interferer`")
+        isunitlevel(interferer) || error("interferer must be unit-level (constant within unit)")
+        z = Float64.(unitfirst(interferer))
+        if unit_covar === nothing
+            s = zeros(nU)
+        else
+            isunitlevel(unit_covar) || error("unit_covar must be unit-level")
+            s = Float64.(unitfirst(unit_covar))
+        end
+        return InterferenceSpec(outcome, treatment, y, a, unit_id, nU,
+                                abar, abar[unit_id], s, s[unit_id], z, family, motif)
     end
     outcome   = StatsModels.termvars(formula.lhs)[1]
     treatment = StatsModels.termvars(formula.rhs)[1]

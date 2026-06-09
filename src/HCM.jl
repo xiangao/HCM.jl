@@ -13,7 +13,7 @@ include("sim.jl")
 export sim_hcm
 
 include("spec.jl")
-export hcm_spec, HCMSpec, NestedSpec
+export hcm_spec, HCMSpec, NestedSpec, InterferenceSpec
 
 include("models.jl")
 
