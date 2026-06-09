@@ -1,6 +1,7 @@
 module HCM
 using Distributions, DataFrames, StatsModels, StatsFuns, Statistics, Random, LinearAlgebra
 using Turing, MCMCChains, FixedEffectModels
+using FastGaussQuadrature
 
 include("intervention.jl")
 export Hard, Soft

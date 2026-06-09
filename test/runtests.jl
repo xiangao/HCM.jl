@@ -14,4 +14,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_compare_fe.jl")
     include("test_nested.jl")
     include("test_nested_report.jl")
+    include("test_sim_interference.jl")
 end
