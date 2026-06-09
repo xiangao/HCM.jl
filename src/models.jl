@@ -23,6 +23,33 @@
     return (; β0, β1, λclass, λschool, σschool, σclass, b_school, b_class, p_class = logistic.(πc))
 end
 
+@model function interference_model(y, a, unit, z, abar, s, n_units, family)
+    μ0 ~ Normal(0,5); μ1 ~ Normal(0,5); δ0 ~ Normal(0,5); δ1 ~ Normal(0,5)
+    γ0 ~ Normal(0,5); γ1 ~ Normal(0,5); γ2 ~ Normal(0,5)
+    σz ~ truncated(Normal(0,2); lower=0); τ0 ~ truncated(Normal(0,2); lower=0)
+    πlogit ~ filldist(Normal(0,3), n_units); zu ~ filldist(Normal(0,1), n_units); u = τ0 .* zu
+    N = length(y)
+    for i in 1:N
+        a[i] ~ Bernoulli(logistic(πlogit[unit[i]]))
+    end
+    for j in 1:n_units
+        z[j] ~ Normal(γ0 + γ1*abar[j] + γ2*s[j], σz)
+    end
+    if family === :gaussian
+        σy ~ truncated(Normal(0,2); lower=0)
+        for i in 1:N
+            η = μ0 + u[unit[i]] + δ0*z[unit[i]] + (μ1 + δ1*z[unit[i]])*a[i]
+            y[i] ~ Normal(η, σy)
+        end
+    else
+        for i in 1:N
+            η = μ0 + u[unit[i]] + δ0*z[unit[i]] + (μ1 + δ1*z[unit[i]])*a[i]
+            y[i] ~ BernoulliLogit(η)
+        end
+    end
+    return (; μ0, μ1, δ0, δ1, γ0, γ1, γ2, σz, u, p = logistic.(πlogit))
+end
+
 @model function confounder_model(y, a, unit, n_units, family)
     μ  ~ MvNormal(zeros(2), 25.0 * I(2))
     τ  ~ filldist(truncated(Normal(0, 2); lower=0), 2)

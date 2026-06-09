@@ -25,8 +25,10 @@ export compare_fe
 
 function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
-             chains::Int=2, iter::Int=600, groups=nothing, kwargs...)
-    spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family, groups=groups)
+             chains::Int=2, iter::Int=600, groups=nothing,
+             interferer=nothing, unit_covar=nothing, kwargs...)
+    spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family,
+                     groups=groups, interferer=interferer, unit_covar=unit_covar)
     if motif === :nested_confounder
         model = nested_model(spec.y, spec.a, spec.school_id, spec.class_id, spec.n_schools, spec.n_classes,
                              spec.abar_class_i, spec.abar_school_i, family)
@@ -38,6 +40,16 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
                  b_school=reduce(vcat, [permutedims(q.b_school) for q in gq]),
                  b_class=reduce(vcat, [permutedims(q.b_class) for q in gq]),
                  p_class=reduce(vcat, [permutedims(q.p_class) for q in gq]))
+        return HCMFit(draws, spec, chain)
+    end
+    if motif === :confounder_interference
+        model = interference_model(spec.y, spec.a, spec.unit_id, spec.z, spec.abar, spec.s, spec.n_units, family)
+        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        gq = vec(generated_quantities(model, chain))
+        sc(f) = [getfield(q, f) for q in gq]
+        draws = (μ0=sc(:μ0), μ1=sc(:μ1), δ0=sc(:δ0), δ1=sc(:δ1), γ0=sc(:γ0), γ1=sc(:γ1), γ2=sc(:γ2),
+                 σz=sc(:σz), u=reduce(vcat, [permutedims(q.u) for q in gq]),
+                 p=reduce(vcat, [permutedims(q.p) for q in gq]))
         return HCMFit(draws, spec, chain)
     end
     model = confounder_model(spec.y, spec.a, spec.unit_id, spec.n_units, family)
