@@ -30,9 +30,18 @@ struct InterferenceSpec
     family::Symbol; motif::Symbol
 end
 
+struct InstrumentSpec
+    outcome::Symbol; treatment::Symbol; instrument::Symbol
+    y::Vector{Float64}              # length n_units (unit-level)
+    a::Vector{Int}; z::Vector{Int}  # length N (subunit)
+    unit_id::Vector{Int}; n_units::Int
+    qa_obs::Vector{Float64}         # length n_units
+    family::Symbol; motif::Symbol
+end
+
 function hcm_spec(formula::FormulaTerm, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
                   motif::Symbol=:confounder, family::Symbol=:gaussian, groups=nothing,
-                  interferer=nothing, unit_covar=nothing)
+                  interferer=nothing, unit_covar=nothing, instrument=nothing)
     if motif === :nested_confounder
         outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
         a = Int.(data[!, treatment]); all(x->x in (0,1), a) || error("treatment must be 0/1")
@@ -69,6 +78,18 @@ function hcm_spec(formula::FormulaTerm, data; unit::Symbol=:unit, subunit::Symbo
         end
         return InterferenceSpec(outcome, treatment, y, a, unit_id, nU,
                                 abar, abar[unit_id], s, s[unit_id], z, family, motif)
+    end
+    if motif === :instrument
+        outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
+        instrument === nothing && error("motif :instrument requires `instrument`")
+        a = Int.(data[!, treatment]); all(x->x in (0,1), a) || error("treatment must be 0/1")
+        z = Int.(data[!, instrument]); all(x->x in (0,1), z) || error("instrument must be 0/1")
+        ucodes = sort(unique(data[!, unit])); unit_id = Int.(indexin(data[!, unit], ucodes)); nU = length(ucodes)
+        ycol = data[!, outcome]
+        all(i -> length(unique(ycol[unit_id .== i]))==1, 1:nU) || error("outcome must be unit-level (constant within unit)")
+        y = Float64[first(ycol[unit_id .== i]) for i in 1:nU]
+        qa_obs = [mean(a[unit_id .== i]) for i in 1:nU]
+        return InstrumentSpec(outcome, treatment, instrument, y, a, z, unit_id, nU, qa_obs, family, motif)
     end
     outcome   = StatsModels.termvars(formula.lhs)[1]
     treatment = StatsModels.termvars(formula.rhs)[1]
