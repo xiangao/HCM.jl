@@ -12,7 +12,7 @@ include("sim.jl")
 export sim_hcm
 
 include("spec.jl")
-export hcm_spec, HCMSpec
+export hcm_spec, HCMSpec, NestedSpec
 
 include("models.jl")
 
@@ -22,10 +22,10 @@ export hcm, HCMFit, summarize_ate
 include("compare_fe.jl")
 export compare_fe
 
-function hcm(formula, data; unit::Symbol, subunit::Symbol,
+function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
-             chains::Int=2, iter::Int=600, kwargs...)
-    spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family)
+             chains::Int=2, iter::Int=600, groups=nothing, kwargs...)
+    spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family, groups=groups)
     model = confounder_model(spec.y, spec.a, spec.unit_id, spec.n_units, family)
     # Julia has 1 thread on this machine; use MCMCSerial for multi-chain
     chain = sample(model, NUTS(0.95), MCMCSerial(), iter, chains; progress=false, kwargs...)
