@@ -10,4 +10,7 @@ export ate, link_inv
 
 include("sim.jl")
 export sim_hcm
+
+include("spec.jl")
+export hcm_spec, HCMSpec
 end # module
