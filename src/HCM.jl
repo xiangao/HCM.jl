@@ -19,6 +19,9 @@ include("models.jl")
 include("methods.jl")
 export hcm, HCMFit, summarize_ate
 
+include("compare_fe.jl")
+export compare_fe
+
 function hcm(formula, data; unit::Symbol, subunit::Symbol,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
              chains::Int=2, iter::Int=600, kwargs...)
