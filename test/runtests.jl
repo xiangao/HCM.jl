@@ -8,6 +8,7 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_sim_nested.jl")
     include("test_spec.jl")
     include("test_spec_nested.jl")
+    include("test_nested_estimand.jl")
     include("test_confounder.jl")
     include("test_methods.jl")
     include("test_compare_fe.jl")

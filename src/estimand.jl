@@ -23,3 +23,27 @@ end
 function _ate(::Val{:confounder}, draws, spec, intv; baseline=default_baseline(intv))
     ate(draws.β0, draws.β1, draws.p, spec.family, intv; baseline=baseline)
 end
+
+function _ate(::Val{:nested_confounder}, draws, spec, intv; baseline=default_baseline(intv))
+    _eo_nested(draws, spec, intv) .- _eo_nested(draws, spec, baseline)
+end
+
+function _eo_nested(draws, spec, intv)
+    D = length(draws.β1); fam = spec.family
+    ki = spec.school_id; ci = spec.class_id
+    out = zeros(D)
+    for d in 1:D
+        B = draws.β0[d] .+ draws.λclass[d].*spec.abar_class_i .+ draws.λschool[d].*spec.abar_school_i .+
+            draws.b_school[d, ki] .+ draws.b_class[d, ci]
+        pc = draws.p_class[d, spec.p_class_idx]
+        if intv isa Hard
+            out[d] = mean(link_inv(B .+ draws.β1[d].*intv.a_star, fam))
+        else
+            treated = link_inv(B .+ draws.β1[d], fam); control = link_inv(B, fam)
+            star = link_inv(B .+ draws.β1[d].*intv.a_star, fam)
+            obs = pc.*treated .+ (1 .- pc).*control
+            out[d] = mean((1-intv.ε).*obs .+ intv.ε.*star)
+        end
+    end
+    out
+end
