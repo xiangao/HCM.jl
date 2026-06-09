@@ -7,4 +7,7 @@ export Hard, Soft
 
 include("estimand.jl")
 export ate, link_inv
+
+include("sim.jl")
+export sim_hcm
 end # module
