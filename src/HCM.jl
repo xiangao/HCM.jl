@@ -40,7 +40,7 @@ function hcm(formula, data; unit::Symbol, subunit::Symbol,
         β1[d, :]   = q.β[2, :]
         pmat[d, :] = q.p
     end
-    HCMFit(β0, β1, pmat, spec, chain)
+    HCMFit((; β0=β0, β1=β1, p=pmat), spec, chain)
 end
 
 end # module

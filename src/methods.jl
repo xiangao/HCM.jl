@@ -1,13 +1,11 @@
 struct HCMFit
-    β0::Matrix{Float64}
-    β1::Matrix{Float64}
-    p::Matrix{Float64}
-    spec::HCMSpec
+    draws::NamedTuple
+    spec        # untyped: HCMSpec now; NestedSpec/InterferenceSpec later. dispatch via spec.motif
     chain
 end
 
 ate(fit::HCMFit, intv; baseline=default_baseline(intv)) =
-    ate(fit.β0, fit.β1, fit.p, fit.spec.family, intv; baseline=baseline)
+    _ate(Val(fit.spec.motif), fit.draws, fit.spec, intv; baseline=baseline)
 
 function summarize_ate(draws::AbstractVector)
     q = quantile(draws, [0.025, 0.975])

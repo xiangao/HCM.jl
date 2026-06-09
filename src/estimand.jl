@@ -19,3 +19,7 @@ end
 function ate(β0, β1, p, family, intv; baseline=default_baseline(intv))
     expected_outcome(β0, β1, p, family, intv) .- expected_outcome(β0, β1, p, family, baseline)
 end
+
+function _ate(::Val{:confounder}, draws, spec, intv; baseline=default_baseline(intv))
+    ate(draws.β0, draws.β1, draws.p, spec.family, intv; baseline=baseline)
+end
