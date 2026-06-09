@@ -1,4 +1,4 @@
-using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
+using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels, Random
 
 @testset "HCM.jl" begin
     # test files are included as they are implemented
@@ -16,4 +16,5 @@ using HCM, Test, Statistics, StatsFuns, DataFrames, StatsModels
     include("test_nested_report.jl")
     include("test_sim_interference.jl")
     include("test_spec_interference.jl")
+    include("test_interference_estimand.jl")
 end

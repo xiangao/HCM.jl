@@ -28,6 +28,35 @@ function _ate(::Val{:nested_confounder}, draws, spec, intv; baseline=default_bas
     _eo_nested(draws, spec, intv) .- _eo_nested(draws, spec, baseline)
 end
 
+function _ate(::Val{:confounder_interference}, draws, spec, intv; baseline=default_baseline(intv))
+    _eo_interf(draws, spec, intv) .- _eo_interf(draws, spec, baseline)
+end
+
+function _eo_interf(draws, spec, intv; gh=gausshermite(24))
+    nodes, w = gh; D = length(draws.μ0); fam = spec.family
+    abar = spec.abar; s = spec.s; n = spec.n_units
+    out = zeros(D)
+    for d in 1:D
+        abar_eff = intv isa Soft ? ((1-intv.ε).*abar .+ intv.ε.*intv.a_star) :
+                                   fill(float(intv.a_star), n)
+        acc_units = 0.0
+        for i in 1:n
+            zmean = draws.γ0[d] + draws.γ1[d]*abar_eff[i] + draws.γ2[d]*s[i]
+            ai = 0.0
+            for k in eachindex(nodes)
+                z = zmean + sqrt(2)*draws.σz[d]*nodes[k]
+                my = av -> link_inv(draws.μ0[d] + draws.u[d,i] + draws.δ0[d]*z + (draws.μ1[d] + draws.δ1[d]*z)*av, fam)
+                val = intv isa Hard ? my(intv.a_star) :
+                      (1-intv.ε)*(draws.p[d,i]*my(1) + (1-draws.p[d,i])*my(0)) + intv.ε*my(intv.a_star)
+                ai += (w[k]/sqrt(pi))*val
+            end
+            acc_units += ai
+        end
+        out[d] = acc_units / n
+    end
+    out
+end
+
 function _eo_nested(draws, spec, intv)
     D = length(draws.β1); fam = spec.family
     ki = spec.school_id; ci = spec.class_id
