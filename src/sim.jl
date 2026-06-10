@@ -4,7 +4,9 @@ function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gauss
         error("A1 implements only :confounder")
     seed === nothing || Random.seed!(seed)
     if motif === :instrument
-        p_ = merge((θ0=0.0, θa=0.5, θr0=0.0, θr1=0.0, ψ=1.0, sd_u=1.0,
+        # Confounding of Y enters THROUGH q^{a|z}=(π0,π1) (the backdoor set the model adjusts for),
+        # matching the HCM instrument identification — U → (α,π0,π1) → both treatment and outcome.
+        p_ = merge((θ0=0.0, θa=0.5, θr0=1.0, θr1=-0.5, sd_u=1.0,
                     α0=0.0, ρ=1.0, sd_α=0.3, β0=1.0, sd_β=0.3, sd_y=0.3, sd_ω=1.0), params)
         u = randn(n).*p_.sd_u
         ω = logistic.(randn(n).*p_.sd_ω)
@@ -15,7 +17,8 @@ function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gauss
         z = Int.(rand(n*m) .< ω[unit])
         a = Int.(rand(n*m) .< logistic.(α[unit] .+ β[unit].*z))
         qa = ω.*π1 .+ (1 .- ω).*π0
-        ηy = p_.θ0 .+ p_.θa.*qa .+ p_.ψ.*u
+        B = p_.θ0 .+ p_.θr0.*π0 .+ p_.θr1.*π1            # per-unit baseline (confounding via q^{a|z})
+        ηy = B .+ p_.θa.*qa
         y_unit = family === :gaussian ? ηy .+ randn(n).*p_.sd_y : Float64.(rand(n) .< logistic.(ηy))
         data = DataFrame(unit=unit, subunit=subunit, z=z, a=a, y=y_unit[unit])
         gi = x -> logistic(x)
@@ -23,10 +26,10 @@ function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gauss
             true_hard = p_.θa
             true_soft = (a★, ε) -> p_.θa * ε * mean(a★ .- qa)
         else
-            true_hard = mean(gi.(p_.θ0 .+ p_.θa .+ p_.ψ.*u) .- gi.(p_.θ0 .+ p_.ψ.*u))
+            true_hard = mean(gi.(B .+ p_.θa) .- gi.(B))
             true_soft = (a★, ε) -> begin
                 rate_new = (1-ε).*qa .+ ε.*a★
-                mean(gi.(p_.θ0 .+ p_.θa.*rate_new .+ p_.ψ.*u) .- gi.(p_.θ0 .+ p_.θa.*qa .+ p_.ψ.*u))
+                mean(gi.(B .+ p_.θa.*rate_new) .- gi.(B .+ p_.θa.*qa))
             end
         end
         return (; data, true_hard, true_soft, u, ω, π0, π1, qa)
