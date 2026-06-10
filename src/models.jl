@@ -50,6 +50,34 @@ end
     return (; μ0, μ1, δ0, δ1, γ0, γ1, γ2, σz, u, p = logistic.(πlogit))
 end
 
+@model function instrument_model(y, a, z, unit, n_units, family)
+    μω ~ Normal(0,2); σω ~ truncated(Normal(0,2); lower=0)
+    zω ~ filldist(Normal(0,1), n_units); ω = logistic.(μω .+ σω .* zω)
+    μα ~ Normal(0,2); σα ~ truncated(Normal(0,2); lower=0)
+    μβ ~ Normal(0,2); σβ ~ truncated(Normal(0,2); lower=0)
+    zα ~ filldist(Normal(0,1), n_units); zβ ~ filldist(Normal(0,1), n_units)
+    α = μα .+ σα .* zα; β = μβ .+ σβ .* zβ
+    θ0 ~ Normal(0,5); θa ~ Normal(0,5); θr0 ~ Normal(0,5); θr1 ~ Normal(0,5)
+    N = length(a)
+    for i in 1:N
+        z[i] ~ Bernoulli(ω[unit[i]])
+        a[i] ~ Bernoulli(logistic(α[unit[i]] + β[unit[i]]*z[i]))
+    end
+    π0 = logistic.(α); π1 = logistic.(α .+ β)
+    qa = ω .* π1 .+ (1 .- ω) .* π0
+    if family === :gaussian
+        σy ~ truncated(Normal(0,2); lower=0)
+        for k in 1:n_units
+            y[k] ~ Normal(θ0 + θa*qa[k] + θr0*π0[k] + θr1*π1[k], σy)
+        end
+    else
+        for k in 1:n_units
+            y[k] ~ BernoulliLogit(θ0 + θa*qa[k] + θr0*π0[k] + θr1*π1[k])
+        end
+    end
+    return (; θ0, θa, θr0, θr1, π0, π1, qa)
+end
+
 @model function confounder_model(y, a, unit, n_units, family)
     μ  ~ MvNormal(zeros(2), 25.0 * I(2))
     τ  ~ filldist(truncated(Normal(0, 2); lower=0), 2)

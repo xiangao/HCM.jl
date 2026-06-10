@@ -52,6 +52,17 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
                  p=reduce(vcat, [permutedims(q.p) for q in gq]))
         return HCMFit(draws, spec, chain)
     end
+    if motif === :instrument
+        model = instrument_model(spec.y, spec.a, spec.z, spec.unit_id, spec.n_units, family)
+        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        gq = vec(generated_quantities(model, chain))
+        scf(f)=[getfield(q,f) for q in gq]
+        draws = (θ0=scf(:θ0), θa=scf(:θa), θr0=scf(:θr0), θr1=scf(:θr1),
+                 π0=reduce(vcat,[permutedims(q.π0) for q in gq]),
+                 π1=reduce(vcat,[permutedims(q.π1) for q in gq]),
+                 qa=reduce(vcat,[permutedims(q.qa) for q in gq]))
+        return HCMFit(draws, spec, chain)
+    end
     model = confounder_model(spec.y, spec.a, spec.unit_id, spec.n_units, family)
     # Julia has 1 thread on this machine; use MCMCSerial for multi-chain
     chain = sample(model, NUTS(0.95), MCMCSerial(), iter, chains; progress=false, kwargs...)
