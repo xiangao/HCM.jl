@@ -1,6 +1,6 @@
 @testset "sim instrument" begin
     out = sim_hcm(:instrument; n=40, m=25,
-                  params=(θ0=0.0, θa=0.5, ψ=1.0, sd_u=1.0, α0=0.0, ρ=1.0, β0=1.0,
+                  params=(θ0=0.0, θa=0.5, θr0=1.0, θr1=-0.5, sd_u=1.0, α0=0.0, ρ=1.0, β0=1.0,
                           sd_ω=1.0, sd_y=0.3), family=:gaussian, seed=1)
     @test Set(names(out.data)) == Set(["unit","subunit","z","a","y"])
     @test out.true_hard ≈ 0.5

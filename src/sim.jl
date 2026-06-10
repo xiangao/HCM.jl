@@ -1,7 +1,7 @@
 function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gaussian, seed=nothing)
     motif === :confounder || motif === :nested_confounder || motif === :confounder_interference ||
         motif === :instrument ||
-        error("A1 implements only :confounder")
+        error("sim_hcm supports :confounder, :nested_confounder, :confounder_interference, :instrument")
     seed === nothing || Random.seed!(seed)
     if motif === :instrument
         # Confounding of Y enters THROUGH q^{a|z}=(π0,π1) (the backdoor set the model adjusts for),

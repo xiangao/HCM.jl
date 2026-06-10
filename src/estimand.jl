@@ -65,6 +65,8 @@ function _ate(::Val{:instrument}, draws, spec, intv; baseline=default_baseline(i
 end
 
 function _eo_instrument(draws, spec, intv)
+    # Soft intervention conditions on the realized within-unit treatment rate q^a (qa_obs = mean(a)),
+    # mirroring the confounder/nested soft forms; the soft target is therefore the sample-rate estimand.
     D = length(draws.θa); fam = spec.family; qaobs = spec.qa_obs
     out = zeros(D)
     for d in 1:D
