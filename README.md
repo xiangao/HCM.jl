@@ -28,6 +28,14 @@ fit = hcm(@formula(y ~ a), audits; unit=:cell, subunit=:factory,
           motif=:confounder_interference, interferer=:z, unit_covar=:s)
 ate(fit, Hard(1); baseline=Hard(0))   # full-do interference ATE (propagated through the channel)
 ate(fit, Soft(1, 0.1))                # soft: dose a*=1 at ε through the front-door channel
+
+# instrument (subunit IV z, unit-level outcome y; HCM do(q^a) rate effect, A2b)
+fit = hcm(@formula(y ~ a), trials; unit=:site, subunit=:patient,
+          instrument=:z, motif=:instrument)
+ate(fit, Hard(1); baseline=Hard(0))   # effect of the unit treatment rate θ_a, backdoor-adjusted on q^{a|z}
+compare_fe(fit)                        # HCM backdoor θ_a vs naive (biased) OLS of y on q^a
+# NOTE: θ_a is a weak-instrument estimand — its CI reliably covers the truth, but the point
+# estimate is imprecise unless the instrument is strong (large within-unit instrument spread).
 ```
 
 ## Tests

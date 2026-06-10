@@ -17,4 +17,10 @@
     @test abs(mean(ah) - sim.true_hard) < 0.3         # generous gross-bias guard (weak-IV imprecision)
     as = ate(fit, Soft(1, 0.2)); qs = quantile(as, [0.025, 0.975])
     @test qs[1] < sim.true_soft(1, 0.2) < qs[2]       # soft CI covers
+    # naive OLS of y on q^a (no q^{a|z} control) is biased by U; backdoor θ_a is closer
+    tab = compare_fe(fit)
+    @test Set(tab.method) == Set(["HCM (backdoor θ_a)", "Naive OLS (y~q^a)"])
+    naive = tab.estimate[tab.method .== "Naive OLS (y~q^a)"][1]
+    hcm_est = tab.estimate[tab.method .== "HCM (backdoor θ_a)"][1]
+    @test abs(naive - sim.true_hard) > abs(hcm_est - sim.true_hard)
 end

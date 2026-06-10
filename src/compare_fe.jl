@@ -1,5 +1,14 @@
 function compare_fe(fit::HCMFit)
     sp = fit.spec
+    if sp.motif === :instrument
+        # unit-level outcome: naive OLS of y on the observed treatment rate q^a (no q^{a|z} control);
+        # biased by U because qa correlates with the confounded (π0,π1). Unit FE doesn't apply (1 y/unit).
+        udf = DataFrame(y = sp.y, qa = sp.qa_obs)
+        m = reg(udf, @formula(y ~ qa))
+        naive = coef(m)[findfirst(==("qa"), coefnames(m))]
+        return DataFrame(method = ["HCM (backdoor θ_a)", "Naive OLS (y~q^a)"],
+                         estimate = [mean(ate(fit, Hard(1); baseline=Hard(0))), naive])
+    end
     if sp.motif === :nested_confounder
         df = DataFrame(y=sp.y, a=Float64.(sp.a), school=sp.school_id, class=sp.class_id)
         m = reg(df, @formula(y ~ a + fe(school) + fe(class)))
