@@ -2,6 +2,13 @@ module HCM
 using Distributions, DataFrames, StatsModels, StatsFuns, Statistics, Random, LinearAlgebra
 using Turing, MCMCChains, FixedEffectModels
 using FastGaussQuadrature
+using CausalGraphs
+
+include("collapse.jl")
+export HCMGraph, hcm_graph, CollapsedModel, collapsed_model
+export collapse, augment, marginalize, latent_project, identify_hcm, recognize_motif
+export hcm_confounder, hcm_interference, hcm_instrument, caire_model
+export to_mermaid
 
 include("intervention.jl")
 export Hard, Soft

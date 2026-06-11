@@ -4,6 +4,7 @@ authors = ["Xiang Ao <xao@hbs.edu>"]
 version = "0.0.1"
 
 [deps]
+CausalGraphs = "68db26a2-7c2b-457b-8f5d-f446513faf50"
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
@@ -16,5 +17,8 @@ MCMCChains = "c7f686f2-ff18-58e9-bc7b-31028e88f75d"
 FixedEffectModels = "9d5cd8c9-2029-5cab-9928-427838db53e3"
 FastGaussQuadrature = "442a2c76-b920-505d-bb47-c5924d526838"
 
+[sources]
+CausalGraphs = {url = "https://github.com/xiangao/CausalGraphs.jl"}
+
 [compat]
-julia = "1.10"
+julia = "1.11"
