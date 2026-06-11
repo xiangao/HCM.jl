@@ -239,3 +239,41 @@ compare_fe:  HCM backdoor 0.329,  Naive OLS 0.957     # naive omits q^{a|z} ⇒ 
     instrument-driven residual identifies `θₐ`. The posterior interval reliably **covers** the truth
     (the robust-IV guarantee), but the point estimate is imprecise unless the instrument is strong —
     visible as a wide interval above.
+
+## When to use which motif
+
+Picking a motif is a modelling decision about *your* problem, not a default. Three questions
+settle it.
+
+**1. Is the inner index an exchangeable population, or is it time?**
+HCM nests *exchangeable* subunits inside units — students in schools, cells in patients. It relies
+on within-unit exchangeability for the collapse to a flat model. Classic **panel data** nests *time
+periods* inside units, and periods are generally **not** exchangeable (trends, dynamics, serial
+correlation, ordered before/after). So HCM fits panel-*like* data when the inner index is a genuine
+exchangeable population (e.g. many individuals per region-year), not the time axis itself. For
+spillovers across time or space, panel/spatial methods are usually the better tool.
+
+**2. Which effect do you actually want — direct or total?**
+The motifs target different estimands:
+
+| You want… | Motif | Estimand |
+|---|---|---|
+| the effect of treating *this* subunit, environment fixed | `:confounder` / `:nested_confounder` | within-unit **direct** effect |
+| the policy effect of treating *everyone*, spillover included | `:confounder_interference` | **total** effect through the channel |
+| a unit-level outcome, treatment shifted by a subunit instrument | `:instrument` | instrument-identified rate effect |
+
+Neither direct nor total is "more correct" — they answer different questions.
+
+**3. If you're tempted by interference: can you name and observe the channel?**
+The interference motif identifies via a front-door adjustment *through* an observed unit-level
+variable `z` (class size, enforcement intensity). If the spillover runs through something you can't
+observe or name, that motif does not apply. And modelling a channel is not free:
+
+  - When interference is **absent or weak, the interference and direct estimands coincide** (they
+    meet at $\gamma_1 = 0$ in the [Interference vs. SUTVA](interference_vs_sutva.md) figure), so the
+    interference model buys no bias reduction — only extra variance and assumptions. Above, the
+    confounder ATE had interval width ≈ 0.06 while the interference total ATE spanned ≈ 1.6.
+  - So model interference when you have a *reason* to (a plausible, observed channel) and want the
+    total effect — ideally after checking the channel responds to the treatment rate
+    ($\bar a \to z$) — not as a reflex. Otherwise the simpler motif is both correct and far more
+    precise.
