@@ -1,3 +1,12 @@
+"""
+    compare_fe(fit::HCMFit) -> NamedTuple
+
+Compare the HCM estimate against a classical fixed-effects / OLS baseline for the same data:
+for `:confounder`/`:nested_confounder`/`:confounder_interference` the within-unit (two-way)
+FE slope, and for `:instrument` the naive OLS of the unit outcome on the observed treatment
+rate `q^a` (no `q^{a|z}` control). Useful for seeing where HCM and the SUTVA/no-spillover
+baseline agree or diverge.
+"""
 function compare_fe(fit::HCMFit)
     sp = fit.spec
     if sp.motif === :instrument

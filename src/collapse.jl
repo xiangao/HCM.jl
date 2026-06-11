@@ -307,21 +307,6 @@ function caire_model(; r_observed::Bool=true)
 end
 
 # ── main entry point ──────────────────────────────────────────────────────────
-"""
-    identify_hcm(x; treatment, outcome, augments=[], marginalizes=[])
-
-Run the identification pipeline on an `HCMGraph` (collapsed automatically) or a
-`CollapsedModel` (used as-is). `augments` is a vector of NamedTuples splatted into
-[`augment`](@ref); `marginalizes` is a vector of node symbols passed to [`marginalize`](@ref),
-applied in order. Returns a NamedTuple:
-
-  - `verdict`        — `:a_fixable`, `:p_fixable`, `:nested_fixable`, `:id_algorithm`, or `:not_identified`
-  - `identification` — the full `CausalGraphs.identify` result (functional, adjustment sets, …)
-  - `admg`           — the projected `CausalGraphs.ADMG`
-  - `model`          — the final `CollapsedModel`
-  - `stages`         — `[(name, model_or_admg), …]` for each pipeline stage (for diagrams)
-  - `motif`          — `:confounder`, `:confounder_interference`, `:instrument`, or `:unknown`
-"""
 # Core pipeline: collapse → augment → marginalize → project → identify. No motif lookup.
 function _pipeline(x; treatment, outcome, augments=[], marginalizes=Symbol[])
     m = x isa HCMGraph ? collapse(x) : x::CollapsedModel
@@ -340,6 +325,21 @@ function _pipeline(x; treatment, outcome, augments=[], marginalizes=Symbol[])
     (admg, m, stages, res)
 end
 
+"""
+    identify_hcm(x; treatment, outcome, augments=[], marginalizes=[])
+
+Run the identification pipeline on an `HCMGraph` (collapsed automatically) or a
+`CollapsedModel` (used as-is). `augments` is a vector of NamedTuples splatted into
+[`augment`](@ref); `marginalizes` is a vector of node symbols passed to [`marginalize`](@ref),
+applied in order. Returns a NamedTuple:
+
+  - `verdict`        — `:a_fixable`, `:p_fixable`, `:nested_fixable`, `:id_algorithm`, or `:not_identified`
+  - `identification` — the full `CausalGraphs.identify` result (functional, adjustment sets, …)
+  - `admg`           — the projected `CausalGraphs.ADMG`
+  - `model`          — the final `CollapsedModel`
+  - `stages`         — `[(name, model_or_admg), …]` for each pipeline stage (for diagrams)
+  - `motif`          — `:confounder`, `:confounder_interference`, `:instrument`, or `:unknown`
+"""
 function identify_hcm(x; treatment, outcome, augments=[], marginalizes=Symbol[])
     admg, m, stages, res = _pipeline(x; treatment=treatment, outcome=outcome,
                                      augments=augments, marginalizes=marginalizes)

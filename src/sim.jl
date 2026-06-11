@@ -1,3 +1,13 @@
+"""
+    sim_hcm(motif; n, m, params=NamedTuple(), family=:gaussian, seed=nothing)
+
+Simulate data from a hierarchical causal model with `n` units and `m` subunits each, for
+`motif` ∈ `(:confounder, :nested_confounder, :confounder_interference, :instrument)`.
+Override DGP parameters via `params` (e.g. `params=(γ1=-1.2,)` to set the interference
+strength). Returns a NamedTuple with `data` (long-format `DataFrame`) and the analytic
+ground-truth effects `true_hard` and `true_soft(a★, ε)` for that DGP, plus the latent
+variables — so estimates can be checked against truth.
+"""
 function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gaussian, seed=nothing)
     motif === :confounder || motif === :nested_confounder || motif === :confounder_interference ||
         motif === :instrument ||

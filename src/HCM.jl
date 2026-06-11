@@ -30,6 +30,24 @@ export hcm, HCMFit, summarize_ate, nested_diagnostics
 include("compare_fe.jl")
 export compare_fe
 
+"""
+    hcm(formula, data; unit=:unit, subunit=:subunit, motif=:confounder, family=:gaussian,
+        chains=2, iter=600, groups=nothing, interferer=nothing, unit_covar=nothing,
+        instrument=nothing, kwargs...) -> HCMFit
+
+Fit a hierarchical causal model by hierarchical Bayes (Turing/NUTS). `formula` is the
+subunit outcome ~ treatment (e.g. `@formula(y ~ a)`); `data` is long-format with `unit`
+and `subunit` id columns. `motif` selects the graph and identification formula:
+
+  - `:confounder` — unit confounder; within-unit backdoor (= fixed effects in the linear case).
+  - `:confounder_interference` — treatment acts through a unit channel `interferer`
+    (with unit covariate `unit_covar`); front-door, full-do through the channel.
+  - `:nested_confounder` — three-level (e.g. students/classes/schools) via `groups=(:school,:class)`.
+  - `:instrument` — subunit `instrument` → treatment, unit-level outcome; backdoor on `q^{a|z}`.
+
+`family` is `:gaussian` or `:bernoulli`. The returned `HCMFit` holds posterior `draws`, the
+`spec`, and the MCMC `chain`; pass it to [`ate`](@ref) and [`compare_fe`](@ref).
+"""
 function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
              chains::Int=2, iter::Int=600, groups=nothing,
