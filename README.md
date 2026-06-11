@@ -1,7 +1,15 @@
 # HCM.jl
 
+[![docs](https://img.shields.io/badge/docs-dev-blue.svg)](https://xiangao.github.io/HCM.jl/)
+
 Hierarchical causal models in Julia (Weinstein & Blei 2024), estimated with Turing.
-A1 ships the **confounder** motif with a **hard + soft (stochastic) intervention** framework.
+Four motifs — **confounder**, **confounder & interference**, **nested**, **instrument** — each with
+**hard and soft (stochastic) interventions**, plus a **general identification engine** that collapses
+an arbitrary HCM graph to an ADMG and runs do-calculus via
+[CausalGraphs.jl](https://github.com/xiangao/CausalGraphs.jl).
+
+**Documentation: <https://xiangao.github.io/HCM.jl/>** — vignettes for the motifs, the identification
+engine, and an interference-vs-SUTVA showcase.
 
 ```julia
 using HCM, DataFrames, StatsModels
