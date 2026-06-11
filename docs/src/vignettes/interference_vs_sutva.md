@@ -11,6 +11,23 @@ In the [`confounder_interference`](@ref sim_hcm) data-generating process, each s
 $a_{ij}$ lifts the unit treatment rate $\bar a_i$, which drives a **unit-level channel** $z_i$ (e.g.
 school-wide class size, region-wide enforcement), which feeds back onto *every* subunit's outcome:
 
+```mermaid
+flowchart LR
+  subgraph unit["unit i"]
+    U(["U (unobserved)"])
+    Z["Z — channel"]
+    subgraph sub["subunit j"]
+      A["A"]
+      Y["Y"]
+      A -->|direct| Y
+    end
+    U --> A
+    U --> Y
+    A -->|"rate ā"| Z
+    Z -->|spillover| Y
+  end
+```
+
 ```math
 z_i = \gamma_0 + \gamma_1\,\bar a_i + \gamma_2\, s_i, \qquad
 y_{ij} = \mu_0 + u_i + \delta_0 z_i + (\mu_1 + \delta_1 z_i)\,a_{ij} + \varepsilon_{ij}.
@@ -70,26 +87,38 @@ recover them at adequate sample size. Fit both motifs to the *same* interference
 $\gamma_1=-0.8$ ($n=150$ units, $m=100$ subunits) and the interference-HCM lands on the total
 effect while the confounder-HCM lands on the direct effect:
 
+Fit both motifs to the **same** interference data ($\gamma_1=-0.8$, $n=60$ units, $m=30$ subunits —
+the suite-verified recovering size) and read off the hard ATE:
+
 ```julia
 using HCM, DataFrames, StatsModels, Statistics
-sim = sim_hcm(:confounder_interference; n=150, m=100, seed=20, params=(γ1=-0.8,))
-sim.true_hard                                        # total target ≈ -0.32
+sim = sim_hcm(:confounder_interference; n=60, m=30, seed=1)   # γ1 = -0.8 (default)
 
-# models the channel → total effect ≈ τ_total(-0.8)
+# models the channel → TOTAL effect
 fi = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit,
          motif=:confounder_interference, interferer=:z, unit_covar=:s, iter=600, chains=2)
 summarize_ate(ate(fi, Hard(1); baseline=Hard(0)))
 
-# assumes no spillover → direct effect only ≈ τ_direct(-0.8) = 0.06
+# assumes no spillover (SUTVA) → DIRECT effect only
 fc = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit, motif=:confounder,
          iter=600, chains=2)
 summarize_ate(ate(fc, Hard(1); baseline=Hard(0)))
+
+sim.true_hard                                        # the true total effect
 ```
 
-The interference-HCM posterior is centred on the total effect (`sim.true_hard`, here ≈ −0.32),
-while the confounder-HCM posterior is centred near the direct effect (≈ 0.06) — exactly the two
-lines in the figure. The interference motif's recovery of `true_hard` is exercised over the full DGP
-by the `test_interference` recovery test in the package suite; the runnable confirmation script is
+```
+interference-HCM (total):  mean -0.199,  95% CI [-1.21, 0.42]    # true total = -0.338, covered
+confounder-HCM   (direct): mean  0.112,  95% CI [0.083, 0.14]    # the direct effect, misses spillover
+sim.true_hard = -0.338
+```
+
+The interference-HCM posterior covers the true **total** effect (−0.34) — wide, because the channel
+effect is hard to pin down with only 60 units — while the confounder-HCM posterior sits tightly near
+the **direct** effect (≈ 0.11). Those are the two ends of the wedge in the figure: assuming no
+spillover doesn't just lose precision, it targets the wrong estimand. The interference motif's
+recovery of `true_hard` is also exercised over the full DGP by the `test_interference` recovery test
+in the package suite; the runnable script is
 [`examples/interference_confirm.jl`](https://github.com/xiangao/HCM.jl/blob/master/examples/interference_confirm.jl).
 
 ## Takeaway

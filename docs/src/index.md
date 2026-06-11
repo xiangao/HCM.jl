@@ -35,9 +35,35 @@ HCM.jl depends on the (unregistered) `CausalGraphs.jl`; its source is declared i
 
 ## Two-minute tour
 
-Identification is a pure graph computation — instant, no sampling. Build the **confounder**
-graph (unit confounder `U`, subunit treatment `A`, subunit outcome `Y`) and ask whether the
-effect of the treatment *distribution* `Q^a` on the outcome marginal `q^y` is identified:
+Take the **confounder** motif: a hidden unit-level confounder $U$ (a school's budget) drives both
+who gets treated and the outcome. Treatment $A$ (tutoring) and outcome $Y$ (test score) are
+subunit-level (students), inside the plate.
+
+```mermaid
+flowchart LR
+  subgraph unit["unit i — school"]
+    U(["U — budget<br/>(unobserved)"])
+    subgraph sub["subunit j — student"]
+      A["A — tutoring"]
+      Y["Y — score"]
+      A -->|effect| Y
+    end
+    U --> A
+    U --> Y
+  end
+```
+
+**The data-generating process** (`sim_hcm(:confounder)`) makes $U$ confound the treatment — it
+raises both the propensity and the outcome — so the true effect is not the naive association:
+
+```math
+U_i \sim \mathcal{N}(0,1), \qquad
+A_{ij} \sim \mathrm{Bernoulli}\!\big(\sigma(U_i)\big), \qquad
+Y_{ij} = \beta_0 + U_i + \beta_1 A_{ij} + \varepsilon_{ij}, \quad \beta_1 = 0.5 .
+```
+
+**Is the effect identified?** Yes — a pure graph computation, instant, no sampling. Collapse the
+plated graph and run do-calculus:
 
 ```@example tour
 using HCM
@@ -48,13 +74,22 @@ r = identify_hcm(g; treatment=:QA, outcome=:qy,
 (verdict = r.verdict, motif = r.motif)
 ```
 
-`:a_fixable` means the effect is identified by a backdoor adjustment (here on the within-unit
-response `Q^{y|a}`) — exactly the paper's confounder result, and the linear special case of fixed
-effects. To *estimate* it, fit the motif and read off the ATE:
+`:a_fixable` means identified by a backdoor adjustment (here on the within-unit response
+$Q^{y|a}$) — the paper's confounder result, and the linear special case of fixed effects.
+
+**Recover the ATE.** Fit the motif; the posterior recovers the true $\beta_1 = 0.5$ despite the
+unobserved confounder:
 
 ```julia
 using HCM, DataFrames, StatsModels
-sim = sim_hcm(:confounder; n=50, m=40, seed=1)
+sim = sim_hcm(:confounder; n=60, m=40, seed=1)
 fit = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit, motif=:confounder)
-summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))   # posterior mean / 95% interval
+
+summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))   # posterior ATE
+sim.true_hard                                         # ground truth = 0.5
+```
+
+```
+posterior ATE:  mean 0.466,  95% CI [0.437, 0.494]    # covers the true 0.5
+sim.true_hard = 0.5
 ```

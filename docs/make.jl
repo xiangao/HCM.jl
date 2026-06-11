@@ -1,4 +1,5 @@
 using Documenter
+using DocumenterMermaid
 using HCM
 
 makedocs(

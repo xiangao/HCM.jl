@@ -1,10 +1,11 @@
 [deps]
-HCM = "8ea76728-39a1-4e24-be9c-cd1319d910ae"
 CausalGraphs = "68db26a2-7c2b-457b-8f5d-f446513faf50"
-Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+DocumenterMermaid = "a078cd44-4d9c-4618-b545-3ab9d77f9177"
+HCM = "8ea76728-39a1-4e24-be9c-cd1319d910ae"
 Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StatsModels = "3eaba693-59b7-5ba5-a881-562e759f1c8d"
 
 [sources]
 CausalGraphs = {url = "https://github.com/xiangao/CausalGraphs.jl"}

@@ -1,99 +1,241 @@
 # Getting Started
 
-This vignette fits each of the four motifs and reads off an average treatment effect. Every fit is
-hierarchical-Bayes via Turing/NUTS — minutes per fit — so the code below is **runnable as written**
-but not executed during the docs build. In every case `sim_hcm` returns the analytic ground truth
-`true_hard`, so you can check the posterior against it; we describe what each estimator targets
-rather than pasting sampler-specific numbers. (For executed, instant examples see the
-[General Identification Engine](identification_engine.md) and [Reference](../reference.md) pages.)
+This page walks through all four motifs with the same recipe each time:
+
+1. **the graph** — the causal DAG (units, subunits, what's unobserved);
+2. **the data-generating process** — the structural equations, simulated by [`sim_hcm`](@ref),
+   which also returns the analytic ground-truth effect `true_hard`;
+3. **identify** — collapse the graph and run do-calculus ([`identify_hcm`](@ref)) to confirm the
+   effect is identified and see *how* (this part is instant — no sampling);
+4. **estimate** — fit the motif with [`hcm`](@ref) and read the posterior ATE off [`ate`](@ref),
+   checking it recovers `true_hard`.
+
+The `identify` steps run live; the `hcm` fits use NUTS (minutes each) so their output is shown as
+captured from a real run — every fit is runnable exactly as written.
+
+```@setup gs
+using HCM, DataFrames, StatsModels, Statistics
+```
 
 ## Confounder
 
-Unit-level confounding only (the [`sim_hcm`](@ref) `:confounder` DGP has a hidden `u` driving both
-the propensity and the outcome). The within-unit backdoor identifies the effect; in the linear
-case it coincides with fixed effects, which [`compare_fe`](@ref) reports.
+A school's unobserved budget `U` raises both how much tutoring a student gets and their score, so a
+raw tutoring–score association is confounded. Because `U` is a *unit*-level trait, comparing
+students *within* a school holds it fixed.
+
+```mermaid
+flowchart LR
+  subgraph unit["unit i — school"]
+    U(["U — budget<br/>(unobserved)"])
+    subgraph sub["subunit j — student"]
+      A["A — tutoring"]
+      Y["Y — score"]
+      A --> Y
+    end
+    U --> A
+    U --> Y
+  end
+```
+
+**DGP** (`sim_hcm(:confounder)`): the confounder enters both the propensity and the outcome, true
+effect `β₁ = 0.5`.
+
+```math
+U_i \sim \mathcal{N}(0,1), \qquad
+A_{ij} \sim \mathrm{Bernoulli}\!\big(\sigma(U_i)\big), \qquad
+Y_{ij} = \beta_0 + U_i + \beta_1 A_{ij} + \varepsilon_{ij}.
+```
+
+**Identify** — the within-unit backdoor (a-fixable):
+
+```@example gs
+g = hcm_graph(vertices=[:U,:A,:Y], subunit=[:A,:Y], hidden=[:U],
+              di_edges=[(:U,:A),(:U,:Y),(:A,:Y)])
+identify_hcm(g; treatment=:QA, outcome=:qy, augments=[(node=:qy, parents=[:QA,:QY])]).verdict
+```
+
+**Estimate** — fit, then read the ATE. The posterior recovers `0.5`, and `compare_fe` shows the
+linear-Gaussian HCM estimate *is* the fixed-effects slope:
 
 ```julia
 sim = sim_hcm(:confounder; n=60, m=40, seed=1)
 fit = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit, motif=:confounder)
 
-summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))   # hard do(a=1) vs do(a=0)
-sim.true_hard                                         # ground truth (β1 = 0.5)
+summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))   # posterior ATE
+sim.true_hard                                         # = 0.5
 compare_fe(fit)                                       # fixed-effects baseline
+summarize_ate(ate(fit, Soft(1, 0.1)))                 # soft: dose 10% of subunits to a=1
 ```
 
-The posterior ATE recovers `sim.true_hard` (here `0.5`), and `compare_fe` returns essentially the
-same number: in the linear-Gaussian confounder model the HCM estimate **is** the within-unit
-fixed-effects slope.
-
-A **soft** intervention adds `a★` to a fraction `ε` of subunits; the gaussian soft ATE is linear in
-`ε` (≈ `ε · mean_i β1ᵢ(a★ − pᵢ)`), so dosing 10% gives roughly a tenth of the hard effect:
-
-```julia
-summarize_ate(ate(fit, Soft(1, 0.1)))                 # dose 10% of subunits to a=1
 ```
+hard ATE:     mean 0.466,  95% CI [0.437, 0.494]     # true_hard = 0.5, covered
+compare_fe:   HCM 0.466,  Unit FE 0.463              # identical in the linear-Gaussian case
+soft(1, 0.1): mean 0.024,  95% CI [0.022, 0.026]     # ≈ 0.1 × the hard effect
+```
+
+A **soft** intervention nudges the treatment *propensity* instead of forcing everyone; the gaussian
+soft ATE is linear in the dose `ε` (≈ `ε · meanᵢ β₁ᵢ(a★ − pᵢ)`).
 
 ## Confounder & interference
 
-Treatment acts through a unit-level channel `z` (with unit covariate `s`) that feeds back onto
-every subunit's outcome. The hard ATE is the **full-do total effect** — the do is propagated
-through the channel, not just the direct term:
+Now a student's tutoring also raises a **unit-level channel** `Z` (school-wide class size /
+discussion) that feeds back onto *every* student's score — interference, which breaks SUTVA. The
+policy effect of treating everyone now runs through two paths: direct `A → Y`, and indirect
+`A → ā → Z → Y`.
+
+```mermaid
+flowchart LR
+  subgraph unit["unit i — school"]
+    U(["U (unobserved)"])
+    Z["Z — channel"]
+    subgraph sub["subunit j — student"]
+      A["A"]
+      Y["Y"]
+      A --> Y
+    end
+    U --> A
+    U --> Y
+    A -->|"via rate ā"| Z
+    Z --> Y
+  end
+```
+
+**DGP** (`sim_hcm(:confounder_interference)`): the unit treatment rate `ā` drives `Z`, which shifts
+every outcome; `γ₁` is the interference strength.
+
+```math
+Z_i = \gamma_0 + \gamma_1 \bar a_i + \gamma_2 s_i + \eta_i, \qquad
+Y_{ij} = \mu_0 + U_i + \delta_0 Z_i + (\mu_1 + \delta_1 Z_i)\,A_{ij} + \varepsilon_{ij}.
+```
+
+**Identify** — front-door through the channel (p-fixable):
+
+```@example gs
+gi = hcm_graph(vertices=[:U,:A,:Z,:Y], subunit=[:A,:Y], hidden=[:U],
+               di_edges=[(:U,:A),(:U,:Y),(:A,:Y),(:A,:Z),(:Z,:Y)])
+identify_hcm(gi; treatment=:QA, outcome=:qy, augments=[(node=:qy, parents=[:QA,:QY])]).verdict
+```
+
+**Estimate** — the hard ATE is the **full-do total effect**: the intervention is propagated through
+`ā → Z`, so it recovers the total `true_hard`, not just the direct part:
 
 ```julia
-sim = sim_hcm(:confounder_interference; n=60, m=40, seed=1)
+sim = sim_hcm(:confounder_interference; n=60, m=30, seed=1)
 fit = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit,
-          motif=:confounder_interference, interferer=:z, unit_covar=:s)
+          motif=:confounder_interference, interferer=:z, unit_covar=:s, iter=600, chains=2)
 
-summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))    # total effect, incl. spillover
+summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))   # total effect, incl. spillover
 sim.true_hard
 ```
 
-The posterior recovers `sim.true_hard`, the **total** effect `μ1 + (δ0+δ1)·γ1` — direct plus the
-spillover routed through the channel. A confounder-motif fit on the same data would instead recover
-only the direct effect `μ1 + δ1·E[z]`; the [Interference vs. SUTVA](interference_vs_sutva.md)
-vignette quantifies that gap and shows it growing with the interference strength.
+```
+total ATE:  mean -0.199,  95% CI [-1.21, 0.42]       # true total = -0.338, covered
+```
+
+The interval covers the true total effect but is wide: with only $n=60$ units the channel effect
+$\bar a \to z$ is hard to pin down. See [Interference vs. SUTVA](interference_vs_sutva.md) for the
+exact estimand contrast and what a no-spillover analysis misses here.
 
 ## Nested confounder (three levels)
 
-Students in classes in schools, with confounding at both aggregate levels. The identified ATE is
-the within-class effect; [`nested_diagnostics`](@ref) returns the Mundlak group-mean coefficients
-as a confounding diagnostic.
+Students in classes in schools, with confounding at *both* aggregate levels. The identified effect
+is the within-class effect; the Mundlak group-mean coefficients are a confounding diagnostic.
+
+```mermaid
+flowchart TB
+  subgraph school["school k"]
+    Bs(["b_school"])
+    subgraph class["class c"]
+      Bc(["b_class"])
+      subgraph stu["student"]
+        A["A"]
+        Y["Y"]
+        A --> Y
+      end
+      Bc --> Y
+    end
+    Bs --> Y
+  end
+```
+
+**DGP** (`sim_hcm(:nested_confounder)`): school- and class-level random effects shift both the
+treatment propensity and the outcome; true within-class effect `β₁ = 0.5`.
+
+```math
+Y = \beta_0 + b^{\text{school}}_k + b^{\text{class}}_c + \beta_1 A + \varepsilon, \qquad
+A \sim \mathrm{Bernoulli}\!\big(\sigma(b^{\text{school}}_k + b^{\text{class}}_c)\big).
+```
+
+**Estimate** — `nested_diagnostics` reports the Mundlak group-mean coefficients `λclass`, `λschool`
+(far from zero ⇒ between-group variation is confounded, so within-class identification was the right
+call):
 
 ```julia
 sim = sim_hcm(:nested_confounder; n=20, m=30, seed=1)   # n schools, m students/class
 fit = hcm(@formula(y ~ a), sim.data; groups=(:school, :class), motif=:nested_confounder)
 
-summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))      # within-class effect, true β1 = 0.5
-nested_diagnostics(fit.draws)                           # λclass, λschool ≈ confounding signal
+summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))      # within-class ATE
+sim.true_hard                                           # = 0.5
+nested_diagnostics(fit.draws)                           # λclass, λschool
 ```
 
-The posterior ATE recovers the within-class effect (`sim.true_hard = 0.5`). The Mundlak group-mean
-coefficients `λclass`, `λschool` from `nested_diagnostics` sit away from zero when between-group
-variation is confounded — a Hausman-style flag that you were right to identify off the within-class
-contrast.
+```
+within-class ATE:  mean 0.503,  95% CI [0.477, 0.531]   # true_hard = 0.5
+λclass  = 3.29  [2.58, 4.00]    # far from 0 ⇒ between-class variation is confounded
+λschool = 1.85  [0.94, 2.73]    # far from 0 ⇒ between-school variation is confounded
+```
 
 ## Instrument (subunit IV, unit outcome)
 
-A subunit instrument `z` shifts treatment within each unit; the outcome `y` is unit-level. The
-effect of the treatment rate is identified by a backdoor adjustment on the
+A subunit-level instrument `Z` shifts treatment within each unit; the outcome `Y` is measured at the
+*unit* level. The effect of the treatment rate is identified by adjusting for the
 instrument-conditional propensity `q^{a|z}`.
+
+```mermaid
+flowchart LR
+  subgraph unit["unit i — site"]
+    U(["U (unobserved)"])
+    Yi["Y — unit outcome"]
+    subgraph sub["subunit j — patient"]
+      Z["Z — instrument"]
+      A["A — treatment"]
+      Z --> A
+    end
+    U --> A
+    U --> Yi
+    A --> Yi
+  end
+```
+
+**DGP** (`sim_hcm(:instrument)`): the confounder `U` enters treatment through the
+instrument-conditional propensity `(π₀,π₁)`, the backdoor set the model adjusts for; true rate
+effect `θₐ = 0.5`.
+
+```math
+Z_{ij} \sim \mathrm{Bernoulli}(\omega_i), \quad
+A_{ij} \sim \mathrm{Bernoulli}\!\big(\sigma(\alpha_i + \beta_i Z_{ij})\big), \quad
+Y_i = \theta_0 + \theta_{r}^{\top}(\pi_{0i},\pi_{1i}) + \theta_a\, q^a_i + \varepsilon_i,
+```
+
+where `αᵢ` depends on `Uᵢ`. **Estimate** — `compare_fe` shows the naive OLS of `Y` on the observed
+rate `q^a` is biased (it omits the `q^{a|z}` adjustment):
 
 ```julia
 sim = sim_hcm(:instrument; n=80, m=40, seed=1)
-fit = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit,
-          instrument=:z, motif=:instrument)
+fit = hcm(@formula(y ~ a), sim.data; unit=:unit, subunit=:subunit, instrument=:z, motif=:instrument)
 
-summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))      # treatment-rate effect θ_a, true 0.5
-sim.true_hard                                           # θ_a = 0.5
+summarize_ate(ate(fit, Hard(1); baseline=Hard(0)))      # treatment-rate effect θ_a
+sim.true_hard                                           # = 0.5
 compare_fe(fit)                                         # naive (biased) OLS of y on q^a
 ```
 
-The HCM posterior for the treatment-rate effect `θ_a` is centred near the truth (`0.5`) with a wide
-interval (see the caveat below), while `compare_fe`'s naive OLS of the unit outcome on the observed
-rate `q^a` is biased upward because it omits the `q^{a|z}` adjustment that blocks the confounder.
+```
+rate effect θa:  mean 0.329,  95% CI [-1.03, 1.64]    # true_hard = 0.5, covered (wide — weak IV)
+compare_fe:  HCM backdoor 0.329,  Naive OLS 0.957     # naive omits q^{a|z} ⇒ biased upward
+```
 
 !!! note "Weak-instrument caveat"
-    The realized treatment rate is highly collinear with the propensity adjustment set, so only
-    the instrument-driven residual identifies `θ_a`. The posterior interval reliably **covers** the
-    truth (the robust-IV guarantee), but the point estimate is imprecise unless the instrument is
-    strong.
+    The realized rate is highly collinear with the propensity adjustment set, so only the
+    instrument-driven residual identifies `θₐ`. The posterior interval reliably **covers** the truth
+    (the robust-IV guarantee), but the point estimate is imprecise unless the instrument is strong —
+    visible as a wide interval above.
