@@ -39,9 +39,67 @@ struct InstrumentSpec
     family::Symbol; motif::Symbol
 end
 
+struct DiDSpec
+    outcome::Symbol; treatment::Symbol
+    y::Vector{Float64}; D::Vector{Int}; Dbar::Vector{Float64}   # Dbar = student mean treatment (Mundlak)
+    student_id::Vector{Int}; n_students::Int
+    sy_id::Vector{Int}; n_sy::Int          # school×year cell
+    school_id::Vector{Int}                 # for clustering / FE baseline
+    family::Symbol; motif::Symbol
+end
+
+struct DiDInterferenceSpec
+    outcome::Symbol; treatment::Symbol
+    y::Vector{Float64}; D::Vector{Int}; Dbar::Vector{Float64}
+    z_cell::Vector{Float64}; abar::Vector{Float64}; scov_cell::Vector{Float64}   # per school×year cell
+    student_id::Vector{Int}; n_students::Int
+    sy_id::Vector{Int}; n_sy::Int
+    school_of_sy::Vector{Int}; period_of_sy::Vector{Float64}
+    school_id::Vector{Int}; n_schools::Int
+    family::Symbol; motif::Symbol
+end
+
 function hcm_spec(formula::FormulaTerm, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
                   motif::Symbol=:confounder, family::Symbol=:gaussian, groups=nothing,
                   interferer=nothing, unit_covar=nothing, instrument=nothing)
+    if motif === :did_interference
+        outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
+        D = Int.(data[!, treatment]); all(x -> x in (0,1), D) || error("treatment must be 0/1")
+        y = Float64.(data[!, outcome]); groups === nothing && error("requires groups=(school,period)")
+        interferer === nothing && error("motif :did_interference requires `interferer` (channel z)")
+        sch, per = groups
+        student_id = Int.(indexin(data[!, unit], sort(unique(data[!, unit]))))
+        school_id  = Int.(indexin(data[!, sch],  sort(unique(data[!, sch]))))
+        sykey = string.(data[!, sch], "|", data[!, per]); sycodes = sort(unique(sykey))
+        sy_id = Int.(indexin(sykey, sycodes)); nsy = length(sycodes)
+        cellfirst(col) = [data[!, col][findfirst(==(c), sy_id)] for c in 1:nsy]
+        z_cell    = Float64.(cellfirst(interferer))
+        scov_cell = unit_covar === nothing ? zeros(nsy) : Float64.(cellfirst(unit_covar))
+        abar      = [mean(D[sy_id .== c]) for c in 1:nsy]
+        school_of_sy = [school_id[findfirst(==(c), sy_id)] for c in 1:nsy]
+        period_of_sy = Float64.([data[!, per][findfirst(==(c), sy_id)] for c in 1:nsy])
+        ns = maximum(student_id); smean = [mean(D[student_id .== s]) for s in 1:ns]
+        Dbar = smean[student_id]
+        return DiDInterferenceSpec(outcome, treatment, y, D, Dbar, z_cell, abar, scov_cell,
+                                   student_id, ns, sy_id, nsy, school_of_sy, period_of_sy,
+                                   school_id, maximum(school_id), family, motif)
+    end
+    if motif === :did
+        outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
+        D = Int.(data[!, treatment]); all(x -> x in (0,1), D) || error("treatment (post indicator) must be 0/1")
+        y = Float64.(data[!, outcome])
+        groups === nothing && error("motif :did requires `groups=(school, period)`")
+        sch, per = groups
+        student_id = Int.(indexin(data[!, unit], sort(unique(data[!, unit]))))
+        school_id  = Int.(indexin(data[!, sch],  sort(unique(data[!, sch]))))
+        sykey = string.(data[!, sch], "|", data[!, per])
+        sy_id = Int.(indexin(sykey, sort(unique(sykey))))
+        ns = maximum(student_id)
+        smean = [mean(D[student_id .== s]) for s in 1:ns]   # student mean treatment
+        Dbar = smean[student_id]                            # per-obs Mundlak covariate
+        return DiDSpec(outcome, treatment, y, D, Dbar, student_id, ns,
+                       sy_id, maximum(sy_id), school_id, family, motif)
+    end
     if motif === :nested_confounder
         outcome = StatsModels.termvars(formula.lhs)[1]; treatment = StatsModels.termvars(formula.rhs)[1]
         a = Int.(data[!, treatment]); all(x->x in (0,1), a) || error("treatment must be 0/1")

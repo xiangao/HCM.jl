@@ -9,6 +9,15 @@ baseline agree or diverge.
 """
 function compare_fe(fit::HCMFit)
     sp = fit.spec
+    if sp.motif === :did
+        # FE-DiD baseline: student + school×year fixed effects (= the HCM layer in the linear case).
+        # For a binary outcome this is the linear-probability model, biased for the ATE.
+        df = DataFrame(y=sp.y, D=Float64.(sp.D), student=sp.student_id, sy=sp.sy_id)
+        m = reg(df, @formula(y ~ D + fe(student) + fe(sy)))
+        fe_est = coef(m)[findfirst(==("D"), coefnames(m))]
+        return DataFrame(method=["HCM did (posterior mean)", "FE-DiD (student + school×year)"],
+                         estimate=[mean(ate(fit, Hard(1); baseline=Hard(0))), fe_est])
+    end
     if sp.motif === :instrument
         # unit-level outcome: naive OLS of y on the observed treatment rate q^a (no q^{a|z} control);
         # biased by U because qa correlates with the confounded (π0,π1). Unit FE doesn't apply (1 y/unit).

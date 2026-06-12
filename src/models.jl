@@ -78,6 +78,64 @@ end
     return (; θ0, θa, θr0, θr1, π0, π1, qa)
 end
 
+# Joint HCM + DiD: student random effect (DiD/partial-pooling layer) + school×year random effect
+# (HCM within-group layer, absorbs all confounding constant within school-year, time-varying included)
+# + treatment effect τ. Identified because the treatment varies within school-year (below the
+# saturated δ). gaussian or bernoulli (the nonlinear margin). Returns per-draw components so the
+# estimand can form the ATT on the correct scale.
+@model function did_model(y, D, Dbar, student, sy, n_students, n_sy, family)
+    τ  ~ Normal(0, 5)
+    λ  ~ Normal(0, 5)                              # Mundlak / correlated-random-effects correction
+    σα ~ truncated(Normal(0, 2); lower = 0)        # student RE sd — partial pooling (the value-add)
+    zα ~ filldist(Normal(0, 1), n_students); α = σα .* zα
+    # school×year effects are the confounder-absorbing layer: keep them UNPOOLED (fixed-effect-like,
+    # wide prior) so a strong upper-level confounder is fully removed, as fixed effects would.
+    δ ~ filldist(Normal(0, 10), n_sy)
+    # λ·Dbar (each student's mean treatment) de-biases the *pooled* student RE: without it this is a
+    # random-effects DiD, biased when adoption is correlated with α (Mundlak 1978 / Hausman). With it,
+    # τ equals the within (fixed-effects) estimate while retaining partial pooling on α.
+    η = α[student] .+ δ[sy] .+ τ .* D .+ λ .* Dbar
+    if family === :gaussian
+        σy ~ truncated(Normal(0, 2); lower = 0)
+        for i in eachindex(y)
+            y[i] ~ Normal(η[i], σy)
+        end
+    else
+        for i in eachindex(y)
+            y[i] ~ BernoulliLogit(η[i])
+        end
+    end
+    return (; τ, λ, σα, α, δ)
+end
+
+# Interference over time: peer channel z_{gt} driven by the within-school treatment RATE feeds back
+# onto every student's outcome. School confounding is STRUCTURED (b_g + trend_g·t), NOT saturated
+# school×year — saturating would absorb the channel. Student selection handled by the RE + Mundlak λ.
+# Identifies the DIRECT effect (a student's own treatment, channel held) vs the TOTAL effect (treat
+# everyone → rate→1 → channel shifts → all outcomes) — which FE-DiD conflates. Gaussian.
+@model function did_interf_model(y, D, Dbar, z, abar, s, student, sy, school_of_sy, period_of_sy,
+                                 n_students, n_schools, n_sy)
+    τ  ~ Normal(0, 5); λ ~ Normal(0, 5)                 # direct effect + Mundlak correction
+    δ0 ~ Normal(0, 5); δ1 ~ Normal(0, 5)                # channel → outcome (peer)
+    γ0 ~ Normal(0, 5); γ1 ~ Normal(0, 5); γ2 ~ Normal(0, 5)
+    σz ~ truncated(Normal(0, 2); lower = 0)
+    σα ~ truncated(Normal(0, 2); lower = 0)
+    zα ~ filldist(Normal(0, 1), n_students); α = σα .* zα
+    b  ~ filldist(Normal(0, 5), n_schools)              # school level (fixed-like)
+    tr ~ filldist(Normal(0, 2), n_schools)              # school trend (structured confounder)
+    for j in 1:n_sy                                     # channel model, per school×year cell
+        z[j] ~ Normal(γ0 + γ1 * abar[j] + γ2 * s[j], σz)
+    end
+    σy ~ truncated(Normal(0, 2); lower = 0)
+    for i in eachindex(y)
+        c = sy[i]
+        η = α[student[i]] + b[school_of_sy[c]] + tr[school_of_sy[c]] * period_of_sy[c] +
+            δ0 * z[c] + (τ + δ1 * z[c]) * D[i] + λ * Dbar[i]
+        y[i] ~ Normal(η, σy)
+    end
+    return (; τ, λ, δ0, δ1, γ0, γ1, γ2, σz, α, b, tr)
+end
+
 @model function confounder_model(y, a, unit, n_units, family)
     μ  ~ MvNormal(zeros(2), 25.0 * I(2))
     τ  ~ filldist(truncated(Normal(0, 2); lower=0), 2)

@@ -14,13 +14,13 @@ include("intervention.jl")
 export Hard, Soft
 
 include("estimand.jl")
-export ate, link_inv
+export ate, link_inv, did_direct
 
 include("sim.jl")
 export sim_hcm
 
 include("spec.jl")
-export hcm_spec, HCMSpec, NestedSpec, InterferenceSpec, InstrumentSpec
+export hcm_spec, HCMSpec, NestedSpec, InterferenceSpec, InstrumentSpec, DiDSpec, DiDInterferenceSpec
 
 include("models.jl")
 
@@ -75,6 +75,25 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
         draws = (μ0=sc(:μ0), μ1=sc(:μ1), δ0=sc(:δ0), δ1=sc(:δ1), γ0=sc(:γ0), γ1=sc(:γ1), γ2=sc(:γ2),
                  σz=sc(:σz), u=reduce(vcat, [permutedims(q.u) for q in gq]),
                  p=reduce(vcat, [permutedims(q.p) for q in gq]))
+        return HCMFit(draws, spec, chain)
+    end
+    if motif === :did_interference
+        model = did_interf_model(spec.y, spec.D, spec.Dbar, spec.z_cell, spec.abar, spec.scov_cell,
+                                 spec.student_id, spec.sy_id, spec.school_of_sy, spec.period_of_sy,
+                                 spec.n_students, spec.n_schools, spec.n_sy)
+        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        gq = vec(generated_quantities(model, chain)); sci(f) = [getfield(q, f) for q in gq]
+        draws = (τ=sci(:τ), λ=sci(:λ), δ0=sci(:δ0), δ1=sci(:δ1), γ0=sci(:γ0), γ1=sci(:γ1), γ2=sci(:γ2))
+        return HCMFit(draws, spec, chain)
+    end
+    if motif === :did
+        model = did_model(spec.y, spec.D, spec.Dbar, spec.student_id, spec.sy_id, spec.n_students, spec.n_sy, family)
+        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        gq = vec(generated_quantities(model, chain))
+        scd(f) = [getfield(q, f) for q in gq]
+        draws = (τ=scd(:τ), λ=scd(:λ), σα=scd(:σα),
+                 α=reduce(vcat, [permutedims(q.α) for q in gq]),
+                 δ=reduce(vcat, [permutedims(q.δ) for q in gq]))
         return HCMFit(draws, spec, chain)
     end
     if motif === :instrument

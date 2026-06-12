@@ -24,6 +24,47 @@ function _ate(::Val{:confounder}, draws, spec, intv; baseline=default_baseline(i
     ate(draws.β0, draws.β1, draws.p, spec.family, intv; baseline=baseline)
 end
 
+# DiD interference, TOTAL effect (full-do through the channel): treat everyone vs no one, propagating
+# the within-school rate ā → channel z → all outcomes. ate(Hard(1);baseline=Hard(0)) returns the total.
+function _ate(::Val{:did_interference}, draws, spec, intv; baseline=default_baseline(intv))
+    a1 = float(intv.a_star); a0 = float(baseline.a_star); Dn = length(draws.τ); sc = spec.scov_cell
+    out = zeros(Dn)
+    for d in 1:Dn
+        z1 = draws.γ0[d] .+ draws.γ1[d]*a1 .+ draws.γ2[d].*sc
+        z0 = draws.γ0[d] .+ draws.γ1[d]*a0 .+ draws.γ2[d].*sc
+        out[d] = draws.δ0[d]*(mean(z1)-mean(z0)) + draws.τ[d]*(a1-a0) +
+                 draws.δ1[d]*(a1*mean(z1) - a0*mean(z0))
+    end
+    out
+end
+
+"""
+    did_direct(fit) -> Vector
+
+Posterior draws of the DIRECT effect for a `:did_interference` fit: a student's own treatment with the
+peer channel held at its observed level (`τ + δ1·E[z]`). Contrast with `ate(fit, Hard(1); baseline=Hard(0))`,
+which returns the TOTAL (full-do) effect including the spillover; FE-DiD conflates the two.
+"""
+function did_direct(fit)
+    d = fit.draws; zbar = mean(fit.spec.z_cell)
+    [d.τ[i] + d.δ1[i]*zbar for i in eachindex(d.τ)]
+end
+
+# DiD ATT: effect of the post indicator D=a★ vs baseline. Gaussian → additive τ; bernoulli →
+# average marginal effect on the probability scale (the Jensen point: ≠ linear-probability FE).
+function _ate(::Val{:did}, draws, spec, intv; baseline=default_baseline(intv))
+    Dn = length(draws.τ); a1 = float(intv.a_star); a0 = float(baseline.a_star)
+    if spec.family === :gaussian
+        return draws.τ .* (a1 - a0)
+    end
+    st = spec.student_id; sy = spec.sy_id; db = spec.Dbar; out = zeros(Dn)
+    for d in 1:Dn
+        η0 = draws.α[d, st] .+ draws.δ[d, sy] .+ draws.λ[d] .* db
+        out[d] = mean(logistic.(η0 .+ draws.τ[d]*a1) .- logistic.(η0 .+ draws.τ[d]*a0))
+    end
+    out
+end
+
 function _ate(::Val{:nested_confounder}, draws, spec, intv; baseline=default_baseline(intv))
     _eo_nested(draws, spec, intv) .- _eo_nested(draws, spec, baseline)
 end

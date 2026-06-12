@@ -10,9 +10,69 @@ variables — so estimates can be checked against truth.
 """
 function sim_hcm(motif::Symbol; n, m, params=NamedTuple(), family::Symbol=:gaussian, seed=nothing)
     motif === :confounder || motif === :nested_confounder || motif === :confounder_interference ||
-        motif === :instrument ||
-        error("sim_hcm supports :confounder, :nested_confounder, :confounder_interference, :instrument")
+        motif === :instrument || motif === :did || motif === :did_interference ||
+        error("sim_hcm supports :confounder, :nested_confounder, :confounder_interference, :instrument, :did, :did_interference")
     seed === nothing || Random.seed!(seed)
+    if motif === :did_interference
+        # interference over time: within-school treatment RATE drives a school×year channel z that
+        # feeds back onto every outcome. School confounding is STRUCTURED (b_g + trend_g·t).
+        p_ = merge((T=6, τ=0.3, δ0=0.4, δ1=0.3, γ0=0.0, γ1=-0.8, γ2=0.2, σz=0.3,
+                    σα=1.0, sd_b=0.7, sd_tr=0.3, sd_scov=1.0, sd_y=0.3, sel_α=0.5, sel_tr=2.0), params)
+        G = n; mps = m; T = p_.T; Ns = G * mps
+        α = randn(Ns) .* p_.σα; school_of = repeat(1:G, inner=mps)
+        b = randn(G) .* p_.sd_b; trend = randn(G) .* p_.sd_tr; scov = randn(G) .* p_.sd_scov
+        lin = p_.sel_α .* α .+ p_.sel_tr .* trend[school_of] .+ randn(Ns)
+        qn = (lin .- minimum(lin)) ./ (maximum(lin) - minimum(lin) + 1e-9)
+        adopt = 2 .+ floor.(Int, (1 .- qn) .* (T - 1)); adopt[qn .< 0.25] .= T + 1
+        student = repeat(1:Ns, inner=T); period = repeat(1:T, outer=Ns); school = school_of[student]
+        D = Int.(period .>= adopt[student])
+        # within-school-year rate and channel
+        sykey = string.(school, "|", period); sycodes = sort(unique(sykey)); sy = Int.(indexin(sykey, sycodes))
+        nsy = length(sycodes)
+        abar = [mean(D[sy .== c]) for c in 1:nsy]
+        sch_of_sy = [school[findfirst(==(c), sy)] for c in 1:nsy]
+        z = p_.γ0 .+ p_.γ1 .* abar .+ p_.γ2 .* scov[sch_of_sy] .+ randn(nsy) .* p_.σz
+        η = α[student] .+ b[school] .+ trend[school] .* period .+ p_.δ0 .* z[sy] .+
+            (p_.τ .+ p_.δ1 .* z[sy]) .* D
+        y = η .+ randn(length(student)) .* p_.sd_y
+        data = DataFrame(student=student, school=school, period=period, a=D, y=y,
+                         z=z[sy], scov=scov[school])
+        # true effects (averaged over the realized sample)
+        true_direct = p_.τ + p_.δ1 * mean(z[sy])                       # within-D, channel held
+        z1 = p_.γ0 .+ p_.γ1 .* 1.0 .+ p_.γ2 .* scov[sch_of_sy]         # channel if everyone treated
+        z0 = p_.γ0 .+ p_.γ1 .* 0.0 .+ p_.γ2 .* scov[sch_of_sy]         # channel if no one treated
+        true_total = p_.δ0 * (mean(z1) - mean(z0)) + p_.τ + p_.δ1 * mean(z1)   # full-do total
+        return (; data, true_total, true_hard=true_total, true_direct, α, b, trend, scov)
+    end
+    if motif === :did
+        # Panel: students in schools over T periods. Time-varying school confounder = school level b_g
+        # + school TREND s_g (the part plain school FE misses). Staggered student adoption correlated
+        # with α and s (confounded). gaussian or bernoulli (the nonlinear margin).
+        p_ = merge((T=6, β0=0.0, τ=0.5, σα=1.0, sd_b=0.7, sd_s=0.3, sd_y=0.5,
+                    sel_α=0.6, sel_s=2.0), params)
+        G = n; mps = m; T = p_.T; Ns = G * mps
+        α = randn(Ns) .* p_.σα
+        school_of = repeat(1:G, inner=mps)
+        b = randn(G) .* p_.sd_b; s = randn(G) .* p_.sd_s
+        lin = p_.sel_α .* α .+ p_.sel_s .* s[school_of] .+ randn(Ns)
+        qn = (lin .- minimum(lin)) ./ (maximum(lin) - minimum(lin) + 1e-9)
+        adopt = 2 .+ floor.(Int, (1 .- qn) .* (T - 1))      # in 2..T
+        adopt[qn .< 0.25] .= T + 1                          # 25% never-treated controls
+        student = repeat(1:Ns, inner=T); period = repeat(1:T, outer=Ns)
+        school = school_of[student]
+        δ = b[school] .+ s[school] .* (period .- (T + 1) / 2)
+        D = Int.(period .>= adopt[student])
+        η0 = p_.β0 .+ α[student] .+ δ
+        if family === :gaussian
+            y = η0 .+ p_.τ .* D .+ randn(length(student)) .* p_.sd_y
+            true_hard = float(p_.τ)
+        else
+            y = Float64.(rand(length(student)) .< logistic.(η0 .+ p_.τ .* D))
+            true_hard = mean(logistic.(η0 .+ p_.τ) .- logistic.(η0))   # average marginal effect (prob scale)
+        end
+        data = DataFrame(student=student, school=school, period=period, a=D, y=y)
+        return (; data, true_hard, α, b, s, adopt)
+    end
     if motif === :instrument
         # Confounding of Y enters THROUGH q^{a|z}=(π0,π1) (the backdoor set the model adjusts for),
         # matching the HCM instrument identification — U → (α,π0,π1) → both treatment and outcome.
