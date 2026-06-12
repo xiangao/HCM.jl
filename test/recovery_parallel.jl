@@ -52,10 +52,9 @@ motifs = [:confounder, :nested_confounder, :confounder_interference, :instrument
 println("Running ", length(motifs), " recoveries on ", nworkers(), " workers ...")
 res = pmap(check, motifs)
 println("\n=== RECOVERY SUMMARY (95% interval covers truth) ===")
-allpass = true
 for (m, est, truth, cov) in res
     println(rpad(string(m), 24), " est=", rpad(round(est,digits=3),7), " truth=", rpad(round(truth,digits=3),7),
             "  ", cov ? "PASS" : "FAIL")
-    allpass &= cov
 end
-println(allpass ? "\nALL RECOVERIES PASS" : "\nSOME RECOVERIES FAILED")
+allpass = all(t -> t[4], res)   # t = (motif, est, truth, cov); avoid for-loop scope on a top-level var
+println(allpass ? "\nALL RECOVERIES PASS" : "\nSOME RECOVERIES FAILED (single-seed coverage misses are expected ~5% of the time)")
