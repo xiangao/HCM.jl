@@ -1,6 +1,6 @@
 module HCM
 using Distributions, DataFrames, StatsModels, StatsFuns, Statistics, Random, LinearAlgebra
-using Turing, MCMCChains, FixedEffectModels
+using Turing, MCMCChains, FixedEffectModels, ADTypes
 using FastGaussQuadrature
 using CausalGraphs
 
@@ -51,13 +51,16 @@ and `subunit` id columns. `motif` selects the graph and identification formula:
 function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
              motif::Symbol=:confounder, family::Symbol=:gaussian,
              chains::Int=2, iter::Int=600, groups=nothing,
-             interferer=nothing, unit_covar=nothing, instrument=nothing, kwargs...)
+             interferer=nothing, unit_covar=nothing, instrument=nothing, adtype=nothing, kwargs...)
     spec  = hcm_spec(formula, data; unit=unit, subunit=subunit, motif=motif, family=family,
                      groups=groups, interferer=interferer, unit_covar=unit_covar, instrument=instrument)
+    # AD backend for NUTS: default ForwardDiff (unchanged behavior); pass adtype=AutoReverseDiff() etc.
+    # for reverse-mode (much faster on many-parameter / many-observation models).
+    adt = adtype === nothing ? AutoForwardDiff() : adtype
     if motif === :nested_confounder
         model = nested_model(spec.y, spec.a, spec.school_id, spec.class_id, spec.n_schools, spec.n_classes,
                              spec.abar_class_i, spec.abar_school_i, family)
-        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        chain = sample(model, NUTS(0.9; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
         gq = vec(generated_quantities(model, chain))
         draws = (β0=[q.β0 for q in gq], β1=[q.β1 for q in gq],
                  λclass=[q.λclass for q in gq], λschool=[q.λschool for q in gq],
@@ -69,7 +72,7 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
     end
     if motif === :confounder_interference
         model = interference_model(spec.y, spec.a, spec.unit_id, spec.z, spec.abar, spec.s, spec.n_units, family)
-        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        chain = sample(model, NUTS(0.9; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
         gq = vec(generated_quantities(model, chain))
         sc(f) = [getfield(q, f) for q in gq]
         draws = (μ0=sc(:μ0), μ1=sc(:μ1), δ0=sc(:δ0), δ1=sc(:δ1), γ0=sc(:γ0), γ1=sc(:γ1), γ2=sc(:γ2),
@@ -81,14 +84,14 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
         model = did_interf_model(spec.y, spec.D, spec.Dbar, spec.z_cell, spec.abar, spec.scov_cell,
                                  spec.student_id, spec.sy_id, spec.school_of_sy, spec.period_of_sy,
                                  spec.n_students, spec.n_schools, spec.n_sy)
-        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        chain = sample(model, NUTS(0.9; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
         gq = vec(generated_quantities(model, chain)); sci(f) = [getfield(q, f) for q in gq]
         draws = (τ=sci(:τ), λ=sci(:λ), δ0=sci(:δ0), δ1=sci(:δ1), γ0=sci(:γ0), γ1=sci(:γ1), γ2=sci(:γ2))
         return HCMFit(draws, spec, chain)
     end
     if motif === :did
         model = did_model(spec.y, spec.D, spec.Dbar, spec.student_id, spec.sy_id, spec.n_students, spec.n_sy, family)
-        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        chain = sample(model, NUTS(0.9; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
         gq = vec(generated_quantities(model, chain))
         scd(f) = [getfield(q, f) for q in gq]
         draws = (τ=scd(:τ), λ=scd(:λ), σα=scd(:σα),
@@ -98,7 +101,7 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
     end
     if motif === :instrument
         model = instrument_model(spec.y, spec.a, spec.z, spec.unit_id, spec.n_units, family)
-        chain = sample(model, NUTS(0.9), MCMCSerial(), iter, chains; progress=false, kwargs...)
+        chain = sample(model, NUTS(0.9; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
         gq = vec(generated_quantities(model, chain))
         scf(f)=[getfield(q,f) for q in gq]
         draws = (θ0=scf(:θ0), θa=scf(:θa), θr0=scf(:θr0), θr1=scf(:θr1),
@@ -109,7 +112,7 @@ function hcm(formula, data; unit::Symbol=:unit, subunit::Symbol=:subunit,
     end
     model = confounder_model(spec.y, spec.a, spec.unit_id, spec.n_units, family)
     # Julia has 1 thread on this machine; use MCMCSerial for multi-chain
-    chain = sample(model, NUTS(0.95), MCMCSerial(), iter, chains; progress=false, kwargs...)
+    chain = sample(model, NUTS(0.95; adtype=adt), MCMCSerial(), iter, chains; progress=false, kwargs...)
     gq    = generated_quantities(model, chain)
     D     = length(gq)
     J     = spec.n_units
