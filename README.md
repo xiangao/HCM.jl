@@ -93,3 +93,13 @@ inputs the engine deliberately does not try to guess.
 ## Tests
 Run `julia --project=. test/runtests.jl` (this package uses a direct test-file invocation,
 not `Pkg.test()`, because this Julia setup cannot register the `Test` stdlib into the Pkg sandbox).
+
+The default suite is fast (≈35 s): the NUTS-based posterior-recovery testsets are
+gated and skipped unless you opt in. To run them, set `HCM_SAMPLING_TESTS=1`:
+
+```bash
+HCM_SAMPLING_TESTS=1 julia --project=. test/runtests.jl
+```
+
+These sampling tests fit real models and are slow; they are skipped by default so the
+suite stays quick for routine checks and CI.
